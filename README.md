@@ -1,6 +1,10 @@
 Pixiv for Muzei
 ===============
 
+**Disclaimer: It's not a part of official products of Pixiv.**
+
+![](preview.png)
+
 Muzei art source extension for Pixiv.
 
 This extension for Roman Nurik's [Muzei][] live wallpaper app uses some
