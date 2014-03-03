@@ -3,11 +3,11 @@ Pixiv for Muzei
 
 **Disclaimer: It's not a part of official products of Pixiv.**
 
-![](preview.png)
+<img src="preview.png" width="400" height="600">
 
 Muzei art source extension for Pixiv.
 
-This extension for Roman Nurik's [Muzei][] live wallpaper app uses some
+This extension for Roman Nurik's *[Muzei][] Live Wallpaper* app uses some
 unofficial APIs from Pixiv to fetch random artworks.
 
 Written by Hong Minhee, and distributed under GPLv3 or any later version.
