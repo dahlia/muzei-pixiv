@@ -17,14 +17,16 @@
 
 package com.pixiv.muzei.pixivsource;
 
+import android.app.Application;
 import android.content.Intent;
 import android.net.Uri;
-import android.text.TextUtils;
 import android.util.Log;
 
 import com.google.android.apps.muzei.api.Artwork;
 import com.google.android.apps.muzei.api.RemoteMuzeiArtSource;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -33,12 +35,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import au.com.bytecode.opencsv.CSVReader;
-import retrofit.ErrorHandler;
-import retrofit.RequestInterceptor;
-import retrofit.RestAdapter;
-import retrofit.RetrofitError;
 
 public class PixivArtSource extends RemoteMuzeiArtSource {
     private static final String LOG_TAG = "com.pixiv.muzei.pixivsource.PixivArtSource";
@@ -58,9 +58,9 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     }
 
     @Override
-    protected void onTryUpdate(int reason) throws RetryException {
-        final Artwork currentArtwork = getCurrentArtwork();
-        final String currentToken = currentArtwork != null ? currentArtwork.getToken() : null;
+    protected void onTryUpdate(final int reason) throws RetryException {
+        final Artwork prevArtwork = getCurrentArtwork();
+        final String prevToken = prevArtwork != null ? prevArtwork.getToken() : null;
         final URL rankingUrl;
         final HttpURLConnection conn;
         final InputStream inputStream;
@@ -70,7 +70,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         try {
             rankingUrl = new URL(RANKING_URL);
         } catch (final MalformedURLException e) {
-            Log.e(LOG_TAG, e == null ? "" : e.toString(), e);
+            Log.e(LOG_TAG, e.toString(), e);
             throw new RetryException();
         }
 
@@ -95,12 +95,12 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 try {
                     inputStream.close();
                 } catch (final IOException e) {
-                    Log.e(LOG_TAG, e == null ? "" : e.toString(), e);
+                    Log.e(LOG_TAG, e.toString(), e);
                     throw new RetryException(e);
                 }
             }
         } catch (final IOException e) {
-            Log.e(LOG_TAG, e == null ? "" : e.toString(), e);
+            Log.e(LOG_TAG, e.toString(), e);
             throw new RetryException(e);
         }
 
@@ -116,8 +116,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         while (true) {
             final int i = random.nextInt(lines.size());
             final String[] columns = lines.get(i);
-            final String token = columns[0];
-            if (currentToken != null && currentToken.equals(token)) {
+            final String workId = columns[0], token = workId + "." + columns[2];
+            if (prevToken != null && prevToken.equals(token)) {
                 continue;
             }
 
@@ -125,19 +125,116 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 Log.d(LOG_TAG, "Column #" + c + ": " + columns[c]);
             }
 
+            final String workUri = "http://www.pixiv.com/works/" + workId;
+            final Uri fileUri = downloadOriginalImage(columns[9], token, workUri);
+
             final Artwork artwork = new Artwork.Builder()
                 .title(columns[3])
                 .byline(columns[5])
-                .imageUri(Uri.parse(columns[9]))
+                .imageUri(fileUri)
                 .token(token)
-                .viewIntent(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("http://www.pixiv.com/works/" + token)))
+                .viewIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(workUri)))
                 .build();
             publishArtwork(artwork);
             break;
         }
 
+        final Application app = getApplication();
+        if (app == null) {
+            Log.e(LOG_TAG, "getApplication() returns null");
+            throw new RetryException();
+        }
+        if (prevToken != null) {
+            final File file = new File(app.getExternalCacheDir(), prevToken);
+            file.delete();
+        }
+
         scheduleUpdate(System.currentTimeMillis() + ROTATE_TIME_MILLIS);
+    }
+
+    private Uri downloadOriginalImage(final String imageUri,
+                                      final String token,
+                                      final String referer) throws RetryException {
+        final Application app = getApplication();
+        if (app == null) {
+            Log.e(LOG_TAG, "getApplication() returns null");
+            throw new RetryException();
+        }
+
+        final URL originalUri;
+        try {
+            originalUri = new URL(getOriginalImageUri(imageUri));
+        } catch (final MalformedURLException e) {
+            Log.e(LOG_TAG, e.toString(), e);
+            throw new RetryException();
+        }
+        Log.d(LOG_TAG, "original image url: " + originalUri);
+
+        final File originalFile = new File(app.getExternalCacheDir(), token);
+        final HttpURLConnection conn;
+        try {
+            conn = (HttpURLConnection) originalUri.openConnection();
+            conn.setReadTimeout(10000);
+            conn.setConnectTimeout(15000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Referer", referer);
+            conn.setDoInput(true);
+            conn.connect();
+            final int status = conn.getResponseCode();
+            switch (status) {
+                case 404:
+                    // When the original image seems to not exist, use the thumbnail instead.
+                    return Uri.parse(imageUri);
+
+                case 200:
+                    break;
+
+                default:
+                    Log.w(LOG_TAG, "Response code: " + status);
+                    throw new RetryException();
+            }
+            Log.d(LOG_TAG, "Response code: " + status);
+            final FileOutputStream fileStream = new FileOutputStream(originalFile);
+            final InputStream inputStream = conn.getInputStream();
+            try {
+                final byte[] buffer = new byte[1024 * 50];
+                int read;
+                while ((read = inputStream.read(buffer)) > 0) {
+                    fileStream.write(buffer, 0, read);
+                }
+            } finally {
+                fileStream.close();
+                try {
+                    inputStream.close();
+                } catch (final IOException e) {
+                    Log.e(LOG_TAG, e.toString(), e);
+                    throw new RetryException(e);
+                }
+            }
+        } catch (final IOException e) {
+            Log.e(LOG_TAG, e.toString(), e);
+            throw new RetryException();
+        }
+
+        Log.d(LOG_TAG, "cache file path: " + originalFile.getAbsolutePath());
+        return Uri.parse("file://" + originalFile.getAbsolutePath());
+    }
+
+    // input: http://i1.pixiv.net/img05/img/username/mobile/12345678_480mw.jpg
+    // output: http://i1.pixiv.net/img05/img/username/12345678.jpg
+    private static final Pattern IMAGE_URI_PATTERN = Pattern.compile(
+        //111111111111111.......22222222......3333333333
+        "^(https?://.+?/)mobile/([0-9]+)_[^.]+([.][^.]+)$"
+    );
+
+    private String getOriginalImageUri(final String imageUri) throws RetryException {
+        final Matcher m = IMAGE_URI_PATTERN.matcher(imageUri);
+        if (m.matches()) {
+            final String base = m.group(1), token = m.group(2), suffix = m.group(3);
+            return base + token + suffix;
+        }
+        Log.e(LOG_TAG, "Match failed: " + imageUri);
+        throw new RetryException();
     }
 }
 
