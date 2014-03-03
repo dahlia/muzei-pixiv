@@ -48,7 +48,7 @@ android {
 
     defaultConfig {
         versionCode version[0] * 10000 + version[1] * 100 + version[2]
-        versionName "#{version[0]}.#{version[1]}.#{version[2]}"
+        versionName "${version[0]}.${version[1]}.${version[2]}"
 
         minSdkVersion 17
         targetSdkVersion 19

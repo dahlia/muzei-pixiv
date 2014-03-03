@@ -1,4 +1,6 @@
+*.apk
 *.iml
+*.jks
 .gradle
 .idea
 build
