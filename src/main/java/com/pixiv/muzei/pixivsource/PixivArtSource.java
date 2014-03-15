@@ -19,7 +19,9 @@ package com.pixiv.muzei.pixivsource;
 
 import android.app.Application;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
+import android.preference.PreferenceManager;
 import android.util.Log;
 
 import com.google.android.apps.muzei.api.Artwork;
@@ -43,7 +45,7 @@ import au.com.bytecode.opencsv.CSVReader;
 public class PixivArtSource extends RemoteMuzeiArtSource {
     private static final String LOG_TAG = "com.pixiv.muzei.pixivsource.PixivArtSource";
     private static final String SOURCE_NAME = "PixivArtSource";
-    private static final int ROTATE_TIME_MILLIS = 60 * 60 * 1000;  // rotate every hour
+    private static final int MINUTE = 60 * 1000;  // a minute in milliseconds
     private static final String RANKING_URL =
         "http://spapi.pixiv.net/iphone/ranking.php?mode=day&content=illust&p=1";
 
@@ -55,6 +57,26 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     public void onCreate() {
         super.onCreate();
         setUserCommands(BUILTIN_COMMAND_ID_NEXT_ARTWORK);
+    }
+
+    private int getChangeInterval() {
+        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        final String defaultValue = getString(R.string.pref_changeInterval_default),
+                     s = preferences.getString("pref_changeInterval", defaultValue);
+        Log.d(LOG_TAG, "pref_changeInterval = \"" + s + "\"");
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            Log.w(LOG_TAG, e.toString(), e);
+            return 0;
+        }
+    }
+
+    private void scheduleUpdate() {
+        final int changeInterval = getChangeInterval();
+        if (changeInterval > 0) {
+            scheduleUpdate(System.currentTimeMillis() + changeInterval * MINUTE);
+        }
     }
 
     @Override
@@ -108,7 +130,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
         if (lines.isEmpty()) {
             Log.w(LOG_TAG, "No artworks returned from Pixiv");
-            scheduleUpdate(System.currentTimeMillis() + ROTATE_TIME_MILLIS);
+            scheduleUpdate();
             return;
         }
 
@@ -149,7 +171,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             file.delete();
         }
 
-        scheduleUpdate(System.currentTimeMillis() + ROTATE_TIME_MILLIS);
+        scheduleUpdate();
     }
 
     private Uri downloadOriginalImage(final String imageUri,

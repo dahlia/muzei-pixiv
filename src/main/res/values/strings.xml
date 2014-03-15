@@ -20,4 +20,6 @@
     <string name="source_name">Pixiv</string>
     <string name="source_description"><!--
     -->Sourcing artworks from Pixiv for Muzei live wallpaper app.</string>
+    <string name="pref_changeInterval">Change interval</string>
+    <string name="pref_changeInterval_default">180</string>
 </resources>

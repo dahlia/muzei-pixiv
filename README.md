@@ -23,3 +23,18 @@ https://play.google.com/store/apps/details?id=net.nurik.roman.muzei
 [GPLv3]: http://www.gnu.org/licenses/gpl-3.0.html
 [play]: https://play.google.com/store/apps/details?id=com.pixiv.muzei.pixivsource
 [badge]: https://developer.android.com/images/brand/en_generic_rgb_wo_45.png
+
+
+Changelog
+---------
+
+### Version 1.0.1
+
+To be released.
+
+- Change interval settings.
+
+
+### Version 1.0.0
+
+Released on March 3, 2014.  Initial release.
