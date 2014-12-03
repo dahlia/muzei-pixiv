@@ -147,8 +147,9 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 Log.d(LOG_TAG, "Column #" + c + ": " + columns[c]);
             }
 
-            final String workUri = "http://www.pixiv.com/works/" + workId;
-            final Uri fileUri = downloadOriginalImage(columns[9], token, workUri);
+            final String workUri = "http://www.pixiv.net/member_illust.php" +
+                                   "?mode=medium&illust_id=" + workId;
+            final Uri fileUri = downloadOriginalImage(columns, token, workUri);
 
             final Artwork artwork = new Artwork.Builder()
                 .title(columns[3])
@@ -174,7 +175,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         scheduleUpdate();
     }
 
-    private Uri downloadOriginalImage(final String imageUri,
+    private Uri downloadOriginalImage(final String[] columns,
                                       final String token,
                                       final String referer) throws RetryException {
         final Application app = getApplication();
@@ -185,7 +186,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
         final URL originalUri;
         try {
-            originalUri = new URL(getOriginalImageUri(imageUri));
+            originalUri = new URL(getOriginalImageUri(columns));
         } catch (final MalformedURLException e) {
             Log.e(LOG_TAG, e.toString(), e);
             throw new RetryException();
@@ -206,7 +207,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             switch (status) {
                 case 404:
                     // When the original image seems to not exist, use the thumbnail instead.
-                    return Uri.parse(imageUri);
+                    return Uri.parse(columns[9]);
 
                 case 200:
                     break;
@@ -249,14 +250,31 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         "^(https?://.+?/)mobile/([0-9]+)_[^.]+([.][^.]+)$"
     );
 
-    private String getOriginalImageUri(final String imageUri) throws RetryException {
-        final Matcher m = IMAGE_URI_PATTERN.matcher(imageUri);
-        if (m.matches()) {
-            final String base = m.group(1), token = m.group(2), suffix = m.group(3);
-            return base + token + suffix;
+    private String getOriginalImageUri(String[] columns) {
+        // Image CSV Spec
+        // #0 illust_id
+        // #1 user_id
+        // #2 type
+        // #3 title
+        // #4 image_server
+        // #5 user_display_name
+        // #6 128x128
+        // #9 480x960
+        // #12 date
+        // #13 tag
+        // #14 tool
+        // #18 desc
+        // #24 username
+        // #29 profile
+        int imageServer;
+        if (columns[4].isEmpty()) {
+            imageServer = 1;
+        } else {
+            imageServer = Integer.parseInt(columns[4], 10);
         }
-        Log.e(LOG_TAG, "Match failed: " + imageUri);
-        throw new RetryException();
+        // output: http://i1.pixiv.net/img05/img/username/12345678.jpg
+        return String.format("http://i1.pixiv.net/img%02d/img/%s/%s.%s",
+                             imageServer, columns[24], columns[0], columns[2]);
     }
 }
 
