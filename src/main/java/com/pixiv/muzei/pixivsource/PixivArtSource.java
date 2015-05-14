@@ -172,7 +172,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 .token(token)
                 .viewIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(workUri)))
                 .build();
-        publishArtwork(artwork);
+            publishArtwork(artwork);
             break;
         }
 
