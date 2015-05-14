@@ -24,6 +24,8 @@ import android.net.Uri;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
+import com.eclipsesource.json.JsonArray;
+import com.eclipsesource.json.JsonObject;
 import com.google.android.apps.muzei.api.Artwork;
 import com.google.android.apps.muzei.api.RemoteMuzeiArtSource;
 
@@ -40,14 +42,15 @@ import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import au.com.bytecode.opencsv.CSVReader;
-
 public class PixivArtSource extends RemoteMuzeiArtSource {
-    private static final String LOG_TAG = "com.pixiv.muzei.pixivsource.PixivArtSource";
+    private static final String LOG_TAG = "muzei.PixivArtSource";
     private static final String SOURCE_NAME = "PixivArtSource";
     private static final int MINUTE = 60 * 1000;  // a minute in milliseconds
     private static final String RANKING_URL =
-        "http://spapi.pixiv.net/iphone/ranking.php?mode=day&content=illust&p=1";
+        "http://www.pixiv.net/ranking.php?mode=daily&content=illust&p=1&format=json";
+    private static final String USER_AGENT =
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/42.0.2311.152 Safari/537.36";
 
     public PixivArtSource() {
         super(SOURCE_NAME);
@@ -86,8 +89,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         final URL rankingUrl;
         final HttpURLConnection conn;
         final InputStream inputStream;
-        final CSVReader csvReader;
-        final List<String[]> lines;
+        final JsonObject ranking;
+        final JsonArray contents;
 
         try {
             rankingUrl = new URL(RANKING_URL);
@@ -101,6 +104,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             conn.setReadTimeout(10000);
             conn.setConnectTimeout(15000);
             conn.setRequestMethod("GET");
+            conn.setRequestProperty("User-Agent", USER_AGENT);
             conn.setDoInput(true);
             conn.connect();
             final int status = conn.getResponseCode();
@@ -111,8 +115,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             Log.d(LOG_TAG, "Response code: " + status);
             inputStream = conn.getInputStream();
             try {
-                csvReader = new CSVReader(new InputStreamReader(inputStream));
-                lines = csvReader.readAll();
+                ranking = JsonObject.readFrom(new InputStreamReader(inputStream));
+                contents = ranking.get("contents").asArray();
             } finally {
                 try {
                     inputStream.close();
@@ -126,9 +130,9 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             throw new RetryException(e);
         }
 
-        Log.d(LOG_TAG, "The number of CSV lines: " + lines.size());
+        Log.d(LOG_TAG, "The number of Contents: " + contents.size());
 
-        if (lines.isEmpty()) {
+        if (contents.isEmpty()) {
             Log.w(LOG_TAG, "No artworks returned from Pixiv");
             scheduleUpdate();
             return;
@@ -136,29 +140,39 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
         final Random random = new Random();
         while (true) {
-            final int i = random.nextInt(lines.size());
-            final String[] columns = lines.get(i);
-            final String workId = columns[0], token = workId + "." + columns[2];
+            final int i = random.nextInt(contents.size());
+            final JsonObject content;
+            try {
+                content = contents.get(i).asObject();
+            } catch (IndexOutOfBoundsException e) {
+                Log.e(LOG_TAG, e.toString(), e);
+                throw new RetryException(e);
+            } catch (NullPointerException e) {
+                Log.e(LOG_TAG, e.toString(), e);
+                throw new RetryException(e);
+            }
+            final int workId = content.getInt("illust_id", -1);
+            final String illustType = content.getString("illust_type", null);
+            if (workId < 0 || illustType == null) {
+                continue;
+            }
+            final String token = workId + "." + illustType;
             if (prevToken != null && prevToken.equals(token)) {
                 continue;
             }
 
-            for (int c = 0; c < columns.length; ++c) {
-                Log.d(LOG_TAG, "Column #" + c + ": " + columns[c]);
-            }
-
             final String workUri = "http://www.pixiv.net/member_illust.php" +
                                    "?mode=medium&illust_id=" + workId;
-            final Uri fileUri = downloadOriginalImage(columns, token, workUri);
+            final Uri fileUri = downloadOriginalImage(content, token, workUri);
 
             final Artwork artwork = new Artwork.Builder()
-                .title(columns[3])
-                .byline(columns[5])
+                .title(content.getString("title", ""))
+                .byline(content.getString("user_name", ""))
                 .imageUri(fileUri)
                 .token(token)
                 .viewIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(workUri)))
                 .build();
-            publishArtwork(artwork);
+        publishArtwork(artwork);
             break;
         }
 
@@ -175,7 +189,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         scheduleUpdate();
     }
 
-    private Uri downloadOriginalImage(final String[] columns,
+    private Uri downloadOriginalImage(final JsonObject content,
                                       final String token,
                                       final String referer) throws RetryException {
         final Application app = getApplication();
@@ -184,9 +198,14 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             throw new RetryException();
         }
 
+        final String smallUri = content.getString("url", null);
+        if (smallUri == null) {
+            throw new RetryException();
+        }
+
         final URL originalUri;
         try {
-            originalUri = new URL(getOriginalImageUri(columns));
+            originalUri = new URL(getOriginalImageUri(content.getString("url", null)));
         } catch (final MalformedURLException e) {
             Log.e(LOG_TAG, e.toString(), e);
             throw new RetryException();
@@ -200,6 +219,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             conn.setReadTimeout(10000);
             conn.setConnectTimeout(15000);
             conn.setRequestMethod("GET");
+            conn.setRequestProperty("User-Agent", USER_AGENT);
             conn.setRequestProperty("Referer", referer);
             conn.setDoInput(true);
             conn.connect();
@@ -207,7 +227,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             switch (status) {
                 case 404:
                     // When the original image seems to not exist, use the thumbnail instead.
-                    return Uri.parse(columns[9]);
+                    return Uri.parse(smallUri);
 
                 case 200:
                     break;
@@ -243,38 +263,21 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         return Uri.parse("file://" + originalFile.getAbsolutePath());
     }
 
-    // input: http://i1.pixiv.net/img05/img/username/mobile/12345678_480mw.jpg
-    // output: http://i1.pixiv.net/img05/img/username/12345678.jpg
+    // input: http://i1.pixiv.net/c/240x480/img-master/img/2015/01/23/01/23/45/12345678_p0_master1200.jpg
+    // output: http://i1.pixiv.net/c/1200x1200/img-master/img/2015/01/23/01/23/45/12345678_p0_master1200.jpg
     private static final Pattern IMAGE_URI_PATTERN = Pattern.compile(
         //111111111111111.......22222222......3333333333
-        "^(https?://.+?/)mobile/([0-9]+)_[^.]+([.][^.]+)$"
+        "^(https?://.+?/c/)[0-9]+x[0-9]+(/img-master.+)$"
     );
 
-    private String getOriginalImageUri(String[] columns) {
-        // Image CSV Spec
-        // #0 illust_id
-        // #1 user_id
-        // #2 type
-        // #3 title
-        // #4 image_server
-        // #5 user_display_name
-        // #6 128x128
-        // #9 480x960
-        // #12 date
-        // #13 tag
-        // #14 tool
-        // #18 desc
-        // #24 username
-        // #29 profile
-        int imageServer;
-        if (columns[4].isEmpty()) {
-            imageServer = 1;
-        } else {
-            imageServer = Integer.parseInt(columns[4], 10);
+    private String getOriginalImageUri(String imageUri) throws RetryException {
+        final Matcher m = IMAGE_URI_PATTERN.matcher(imageUri);
+        if (m.matches()) {
+            final String base = m.group(1), path = m.group(2);
+            return base + "1200x1200" + path;
+
         }
-        // output: http://i1.pixiv.net/img05/img/username/12345678.jpg
-        return String.format("http://i1.pixiv.net/img%02d/img/%s/%s.%s",
-                             imageServer, columns[24], columns[0], columns[2]);
+        Log.e(LOG_TAG, "Match failed: " + imageUri);
+        throw new RetryException();
     }
 }
-
