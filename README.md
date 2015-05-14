@@ -28,13 +28,24 @@ https://play.google.com/store/apps/details?id=net.nurik.roman.muzei
 Changelog
 ---------
 
+### Version 1.1.0
+
+- Support new pixiv feed API.
+
 ### Version 1.0.1
 
-To be released.
-
+- Change image url.
 - Change interval settings.
 
 
 ### Version 1.0.0
 
 Released on March 3, 2014.  Initial release.
+
+Maintainers
+-----------
+* [Hong Minhee][]
+* [Sunguk Lee][]
+
+[Hong Minhee]: http://dahlia.kr/
+[Sunguk Lee]: https://github.com/d3m3vilurr
