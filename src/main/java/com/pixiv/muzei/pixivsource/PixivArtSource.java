@@ -18,8 +18,11 @@
 package com.pixiv.muzei.pixivsource;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.preference.PreferenceManager;
 import android.util.Log;
@@ -75,8 +78,24 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         }
     }
 
+    private boolean isOnlyUpdateOnWifi() {
+        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        final boolean defaultValue = false,
+                      v = preferences.getBoolean("pref_onlyWifi", defaultValue);
+        Log.d(LOG_TAG, "pref_onlyWifi = " + v);
+        return v;
+    }
+
+    private boolean isEnabledWifi() {
+        ConnectivityManager connectivityManager =
+            (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo wifi = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+        return wifi.isConnected();
+    }
+
     private void scheduleUpdate() {
         final int changeInterval = getChangeInterval();
+
         if (changeInterval > 0) {
             scheduleUpdate(System.currentTimeMillis() + changeInterval * MINUTE);
         }
@@ -91,6 +110,12 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         final InputStream inputStream;
         final JsonObject ranking;
         final JsonArray contents;
+
+        if (isOnlyUpdateOnWifi() && !isEnabledWifi()) {
+            Log.d(LOG_TAG, "no wifi");
+            scheduleUpdate();
+            return;
+        }
 
         try {
             rankingUrl = new URL(RANKING_URL);

@@ -22,4 +22,5 @@
     -->Sourcing artworks from Pixiv for Muzei live wallpaper app.</string>
     <string name="pref_changeInterval">Change interval</string>
     <string name="pref_changeInterval_default">180</string>
+    <string name="pref_onlyWifi">Only over WIFI</string>
 </resources>

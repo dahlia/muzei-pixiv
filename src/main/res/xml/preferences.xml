@@ -8,4 +8,9 @@
         android:entryValues="@array/pref_changeInterval_entryValues"
         android:defaultValue="@string/pref_changeInterval_default"
         android:persistent="true" />
+    <CheckBoxPreference
+        android:key="pref_onlyWifi"
+        android:title="@string/pref_onlyWifi"
+        android:dialogTitle="Only over WIFI"
+        android:persistent="true" />
 </PreferenceScreen>
