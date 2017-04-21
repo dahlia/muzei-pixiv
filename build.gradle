@@ -15,11 +15,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-def version = [1, 1, 2]
-
-assert version[1] < 100, "minor version must be less than 100"
-assert version[2] < 100, "micro version must be less than 100"
-
 buildscript {
     repositories {
         mavenCentral()
@@ -47,8 +42,8 @@ android {
     compileSdkVersion 19
     buildToolsVersion '25.0.0'
     defaultConfig {
-        versionCode version[0] * 10000 + version[1] * 100 + version[2]
-        versionName "${version[0]}.${version[1]}.${version[2]}"
+        versionCode 10102
+        versionName "1.1.2"
 
         minSdkVersion 17
         targetSdkVersion 19
