@@ -50,10 +50,10 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     private static final String SOURCE_NAME = "PixivArtSource";
     private static final int MINUTE = 60 * 1000;  // a minute in milliseconds
     private static final String RANKING_URL =
-        "http://www.pixiv.net/ranking.php?mode=daily&content=illust&p=1&format=json";
+        "https://www.pixiv.net/ranking.php?mode=daily&content=illust&p=1&format=json";
     private static final String USER_AGENT =
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-        "Chrome/42.0.2311.152 Safari/537.36";
+        "Chrome/57.0.2987.133 Safari/537.36";
 
     public PixivArtSource() {
         super(SOURCE_NAME);
