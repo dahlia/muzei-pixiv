@@ -27,6 +27,11 @@ https://play.google.com/store/apps/details?id=net.nurik.roman.muzei
 
 Changelog
 ---------
+### Version 1.1.2
+
+- Change pixiv API address
+
+
 ### Version 1.1.1
 
 - New preference; Only update image over WIFI connection
