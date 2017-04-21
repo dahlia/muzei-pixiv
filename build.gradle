@@ -23,6 +23,7 @@ assert version[2] < 100, "micro version must be less than 100"
 buildscript {
     repositories {
         mavenCentral()
+        jcenter()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:2.3.1'
@@ -33,6 +34,7 @@ apply plugin: 'android'
 
 repositories {
     mavenCentral()
+    jcenter()
 }
 
 dependencies {
