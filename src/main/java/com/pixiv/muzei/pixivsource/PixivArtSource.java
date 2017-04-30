@@ -27,6 +27,7 @@ import android.net.Uri;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
+import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
 import com.google.android.apps.muzei.api.Artwork;
@@ -36,14 +37,14 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.List;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 public class PixivArtSource extends RemoteMuzeiArtSource {
     private static final String LOG_TAG = "muzei.PixivArtSource";
@@ -105,9 +106,6 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     protected void onTryUpdate(final int reason) throws RetryException {
         final Artwork prevArtwork = getCurrentArtwork();
         final String prevToken = prevArtwork != null ? prevArtwork.getToken() : null;
-        final URL rankingUrl;
-        final HttpURLConnection conn;
-        final InputStream inputStream;
         final JsonObject ranking;
         final JsonArray contents;
 
@@ -118,38 +116,14 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         }
 
         try {
-            rankingUrl = new URL(RANKING_URL);
-        } catch (final MalformedURLException e) {
-            Log.e(LOG_TAG, e.toString(), e);
-            throw new RetryException();
-        }
-
-        try {
-            conn = (HttpURLConnection) rankingUrl.openConnection();
-            conn.setReadTimeout(10000);
-            conn.setConnectTimeout(15000);
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", USER_AGENT);
-            conn.setDoInput(true);
-            conn.connect();
-            final int status = conn.getResponseCode();
-            if (status != 200) {
-                Log.w(LOG_TAG, "Response code: " + status);
+            Response resp = sendRequest(RANKING_URL);
+            Log.d(LOG_TAG, "Response code: " + resp.code());
+            if (!resp.isSuccessful()) {
                 throw new RetryException();
             }
-            Log.d(LOG_TAG, "Response code: " + status);
-            inputStream = conn.getInputStream();
-            try {
-                ranking = JsonObject.readFrom(new InputStreamReader(inputStream));
-                contents = ranking.get("contents").asArray();
-            } finally {
-                try {
-                    inputStream.close();
-                } catch (final IOException e) {
-                    Log.e(LOG_TAG, e.toString(), e);
-                    throw new RetryException(e);
-                }
-            }
+
+            ranking = Json.parse(resp.body().string()).asObject();
+            contents = ranking.get("contents").asArray();
         } catch (final IOException e) {
             Log.e(LOG_TAG, e.toString(), e);
             throw new RetryException(e);
@@ -228,42 +202,25 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             throw new RetryException();
         }
 
-        final URL originalUri;
-        try {
-            originalUri = new URL(getOriginalImageUri(content.getString("url", null)));
-        } catch (final MalformedURLException e) {
-            Log.e(LOG_TAG, e.toString(), e);
-            throw new RetryException();
-        }
+        final String originalUri = getOriginalImageUri(smallUri);
         Log.d(LOG_TAG, "original image url: " + originalUri);
 
         final File originalFile = new File(app.getExternalCacheDir(), token);
-        final HttpURLConnection conn;
+
         try {
-            conn = (HttpURLConnection) originalUri.openConnection();
-            conn.setReadTimeout(10000);
-            conn.setConnectTimeout(15000);
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", USER_AGENT);
-            conn.setRequestProperty("Referer", referer);
-            conn.setDoInput(true);
-            conn.connect();
-            final int status = conn.getResponseCode();
-            switch (status) {
-                case 404:
-                    // When the original image seems to not exist, use the thumbnail instead.
-                    return Uri.parse(smallUri);
+            Response resp = sendRequest(originalUri, referer);
 
-                case 200:
-                    break;
-
-                default:
-                    Log.w(LOG_TAG, "Response code: " + status);
-                    throw new RetryException();
-            }
+            final int status = resp.code();
             Log.d(LOG_TAG, "Response code: " + status);
+            if (!resp.isSuccessful()) {
+                if (status == 404) {
+                    return Uri.parse(smallUri);
+                }
+                throw new RetryException();
+            }
+
             final FileOutputStream fileStream = new FileOutputStream(originalFile);
-            final InputStream inputStream = conn.getInputStream();
+            final InputStream inputStream = resp.body().byteStream();
             try {
                 final byte[] buffer = new byte[1024 * 50];
                 int read;
@@ -272,13 +229,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 }
             } finally {
                 fileStream.close();
-                try {
-                    inputStream.close();
-                } catch (final IOException e) {
-                    Log.e(LOG_TAG, e.toString(), e);
-                    throw new RetryException(e);
-                }
             }
+            inputStream.close();
         } catch (final IOException e) {
             Log.e(LOG_TAG, e.toString(), e);
             throw new RetryException();
@@ -304,5 +256,23 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         }
         Log.e(LOG_TAG, "Match failed: " + imageUri);
         throw new RetryException();
+    }
+
+    private Response sendRequest(String url) throws IOException {
+        return sendRequest(url, null);
+    }
+
+    private Response sendRequest(String url, String referer) throws IOException {
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build();
+        Request.Builder builder = new Request.Builder()
+            .addHeader("User-Agent", USER_AGENT)
+            .url(url);
+        if (referer != null) {
+            builder.addHeader("Referer", referer);
+        }
+        return httpClient.newCall(builder.build()).execute();
     }
 }

@@ -25,7 +25,7 @@ buildscript {
     }
 }
 
-apply plugin: 'android'
+apply plugin: 'com.android.application'
 
 repositories {
     mavenCentral()
@@ -35,8 +35,9 @@ repositories {
 dependencies {
     compile 'com.squareup.retrofit:retrofit:1.3.0'
     compile 'com.google.android.apps.muzei:muzei-api:+'
-    compile 'com.android.support:support-v4:18.0.0'
-    compile 'com.eclipsesource.minimal-json:minimal-json:0.9.2'
+    compile 'com.android.support:support-v4:25.3.1'
+    compile 'com.eclipsesource.minimal-json:minimal-json:0.9.4'
+    compile 'com.squareup.okhttp3:okhttp:3.7.0'
     //compile project(':api')
 }
 
