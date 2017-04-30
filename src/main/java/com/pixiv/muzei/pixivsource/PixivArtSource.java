@@ -25,11 +25,13 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.preference.PreferenceManager;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
+import com.eclipsesource.json.JsonValue;
 import com.google.android.apps.muzei.api.Artwork;
 import com.google.android.apps.muzei.api.RemoteMuzeiArtSource;
 
@@ -37,24 +39,24 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class PixivArtSource extends RemoteMuzeiArtSource {
     private static final String LOG_TAG = "muzei.PixivArtSource";
     private static final String SOURCE_NAME = "PixivArtSource";
     private static final int MINUTE = 60 * 1000;  // a minute in milliseconds
-    private static final String RANKING_URL =
-        "https://www.pixiv.net/ranking.php?mode=daily&content=illust&p=1&format=json";
-    private static final String USER_AGENT =
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-        "Chrome/57.0.2987.133 Safari/537.36";
+
+    private String accessToken = null;
+    private String userId = null;
+    private boolean authorized = false;
 
     public PixivArtSource() {
         super(SOURCE_NAME);
@@ -68,9 +70,11 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
     private int getChangeInterval() {
         final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
-        final String defaultValue = getString(R.string.pref_changeInterval_default),
-                     s = preferences.getString("pref_changeInterval", defaultValue);
-        Log.d(LOG_TAG, "pref_changeInterval = \"" + s + "\"");
+        final String s = preferences.getString(
+                "pref_changeInterval", String.valueOf(R.string.pref_changeInterval_default)
+        );
+        Log.d(LOG_TAG, "pref_changeInterval = " + s);
+
         try {
             return Integer.parseInt(s);
         } catch (NumberFormatException e) {
@@ -102,6 +106,78 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         }
     }
 
+    private boolean checkAuth() {
+        // cleanup authorization information
+        this.authorized = false;
+
+        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        if (!preferences.getBoolean("pref_useAuth", false)) {
+            return false;
+        }
+        final String loginId = preferences.getString("pref_loginId", "");
+        final String loginPassword = preferences.getString("pref_loginPassword", "");
+        if (loginId.equals("") || loginPassword.equals("")) {
+            return false;
+        }
+
+        JsonObject data = new JsonObject();
+        data.add("get_secure_url", 1);
+        data.add("client_id", PixivArtSourceDefines.CLIENT_ID);
+        data.add("client_secret", PixivArtSourceDefines.CLIENT_SECRET);
+        // TODO: use refresh token for the security
+        data.add("grant_type", "password");
+        data.add("username", loginId);
+        data.add("password", loginPassword);
+
+        JsonObject ret;
+        try {
+            Response resp = sendPostRequest(
+                    PixivArtSourceDefines.OAUTH_URL,
+                    data,
+                    "application/x-www-form-urlencoded"
+            );
+
+            //Log.d(LOG_TAG, resp.body().string());
+            ret = Json.parse(resp.body().string()).asObject();
+        } catch (IOException e) {
+            return false;
+        }
+        if (ret.getBoolean("has_error", false)) {
+            return false;
+        }
+        final JsonObject tokens = ret.get("response").asObject();
+        this.accessToken = tokens.getString("access_token", null);
+        this.userId = tokens.get("user").asObject().getString("id", null);
+        this.authorized = this.accessToken != null && this.userId != null;
+        return authorized;
+    }
+
+    private String getUpdateUri() {
+        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
+
+        final String updateMode = preferences.getString(
+                "pref_updateMode", String.valueOf(R.string.pref_updateMode_default)
+        );
+
+        switch (updateMode) {
+            case "follow":
+                return checkAuth()
+                    ? (PixivArtSourceDefines.FOLLOW_URL + "?restrict=public")
+                    : PixivArtSourceDefines.DAILY_RANKING_URL;
+            case "bookmark":
+                return checkAuth()
+                    ? (PixivArtSourceDefines.BOOKMARK_URL + "?user_id=" + this.userId + "&restrict=public")
+                    : PixivArtSourceDefines.DAILY_RANKING_URL;
+            case "weekly_rank":
+                return PixivArtSourceDefines.WEEKLY_RANKING_URL;
+            case "monthly_rank":
+                return PixivArtSourceDefines.MONTHLY_RANKING_URL;
+            case "daily_rank":
+            default:
+                return PixivArtSourceDefines.DAILY_RANKING_URL;
+        }
+    }
+
     @Override
     protected void onTryUpdate(final int reason) throws RetryException {
         final Artwork prevArtwork = getCurrentArtwork();
@@ -115,15 +191,17 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             return;
         }
 
+        final String updateUri = getUpdateUri();
+
         try {
-            Response resp = sendRequest(RANKING_URL);
+            Response resp = sendGetRequest(updateUri);
             Log.d(LOG_TAG, "Response code: " + resp.code());
             if (!resp.isSuccessful()) {
                 throw new RetryException();
             }
 
             ranking = Json.parse(resp.body().string()).asObject();
-            contents = ranking.get("contents").asArray();
+            contents = ranking.get("illusts").asArray();
         } catch (final IOException e) {
             Log.e(LOG_TAG, e.toString(), e);
             throw new RetryException(e);
@@ -143,30 +221,31 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             final JsonObject content;
             try {
                 content = contents.get(i).asObject();
-            } catch (IndexOutOfBoundsException e) {
-                Log.e(LOG_TAG, e.toString(), e);
-                throw new RetryException(e);
-            } catch (NullPointerException e) {
+            } catch (IndexOutOfBoundsException | NullPointerException e) {
                 Log.e(LOG_TAG, e.toString(), e);
                 throw new RetryException(e);
             }
-            final int workId = content.getInt("illust_id", -1);
-            final String illustType = content.getString("illust_type", null);
-            if (workId < 0 || illustType == null) {
+            final int workId = content.getInt("id", -1);
+            final int restrict = content.getInt("restrict", -1);
+            if (workId < 0 || restrict < 0) {
                 continue;
             }
-            final String token = workId + "." + illustType;
+            final String token = workId + "." + restrict;
+            Log.d(LOG_TAG, token);
             if (prevToken != null && prevToken.equals(token)) {
                 continue;
             }
 
             final String workUri = "http://www.pixiv.net/member_illust.php" +
                                    "?mode=medium&illust_id=" + workId;
-            final Uri fileUri = downloadOriginalImage(content, token, workUri);
+            final Uri fileUri = downloadOriginalImage(content, token, updateUri);
+            final String title = content.getString("title", "");
+            final JsonObject user = content.get("user").asObject();
+            final String username = user == null ? "" : user.getString("name", "");
 
             final Artwork artwork = new Artwork.Builder()
-                .title(content.getString("title", ""))
-                .byline(content.getString("user_name", ""))
+                .title(title)
+                .byline(username)
                 .imageUri(fileUri)
                 .token(token)
                 .viewIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(workUri)))
@@ -188,6 +267,38 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         scheduleUpdate();
     }
 
+    private String findOriginalImageUri(JsonObject content) throws RetryException {
+        JsonObject single_page = content.get("meta_single_page").asObject();
+        if (single_page == null) {
+            throw new RetryException();
+        }
+        String url;
+        url = single_page.getString("original_image_url", null);
+        if (url != null) {
+            return url;
+        }
+        JsonArray meta_pages = content.get("meta_pages").asArray();
+        JsonObject group = null;
+        if (!meta_pages.isEmpty()) {
+            group = meta_pages.get(0).asObject();
+        }
+        if (group == null) {
+            group = content;
+        }
+
+        JsonObject urls = group.get("image_urls").asObject();
+        if (urls == null) {
+            throw new RetryException();
+        }
+        for (String size : new String[]{"original", "large", "medium"}) {
+            url = urls.getString(size, null);
+            if (url != null) {
+                return url;
+            }
+        }
+        throw new RetryException();
+    }
+
     private Uri downloadOriginalImage(final JsonObject content,
                                       final String token,
                                       final String referer) throws RetryException {
@@ -197,25 +308,15 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             throw new RetryException();
         }
 
-        final String smallUri = content.getString("url", null);
-        if (smallUri == null) {
-            throw new RetryException();
-        }
-
-        final String originalUri = getOriginalImageUri(smallUri);
-        Log.d(LOG_TAG, "original image url: " + originalUri);
-
+        final String uri = findOriginalImageUri(content);
         final File originalFile = new File(app.getExternalCacheDir(), token);
 
         try {
-            Response resp = sendRequest(originalUri, referer);
+            Response resp = sendGetRequest(uri, referer);
 
             final int status = resp.code();
             Log.d(LOG_TAG, "Response code: " + status);
             if (!resp.isSuccessful()) {
-                if (status == 404) {
-                    return Uri.parse(smallUri);
-                }
                 throw new RetryException();
             }
 
@@ -240,38 +341,72 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         return Uri.parse("file://" + originalFile.getAbsolutePath());
     }
 
-    // input: http://i1.pixiv.net/c/240x480/img-master/img/2015/01/23/01/23/45/12345678_p0_master1200.jpg
-    // output: http://i1.pixiv.net/c/1200x1200/img-master/img/2015/01/23/01/23/45/12345678_p0_master1200.jpg
-    private static final Pattern IMAGE_URI_PATTERN = Pattern.compile(
-        //111111111111111.......22222222......3333333333
-        "^(https?://.+?/c/)[0-9]+x[0-9]+(/img-master.+)$"
-    );
-
-    private String getOriginalImageUri(String imageUri) throws RetryException {
-        final Matcher m = IMAGE_URI_PATTERN.matcher(imageUri);
-        if (m.matches()) {
-            final String base = m.group(1), path = m.group(2);
-            return base + "1200x1200" + path;
-
-        }
-        Log.e(LOG_TAG, "Match failed: " + imageUri);
-        throw new RetryException();
+    private Response sendGetRequest(String url) throws IOException {
+        return sendGetRequest(url, null);
     }
 
-    private Response sendRequest(String url) throws IOException {
-        return sendRequest(url, null);
-    }
-
-    private Response sendRequest(String url, String referer) throws IOException {
+    private Response sendGetRequest(String url, String referer) throws IOException {
+        Log.d(LOG_TAG, "Request: " + url);
         OkHttpClient httpClient = new OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build();
-        Request.Builder builder = new Request.Builder()
-            .addHeader("User-Agent", USER_AGENT)
-            .url(url);
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build();
+        Request.Builder builder = applyCommonHeaders(new Request.Builder())
+                .url(url);
         if (referer != null) {
             builder.addHeader("Referer", referer);
+        }
+        if (this.authorized) {
+            builder.addHeader("Authorization", "Bearer " + this.accessToken);
+        }
+        return httpClient.newCall(builder.build()).execute();
+    }
+
+    private Request.Builder applyCommonHeaders(Request.Builder builder) {
+        return builder.addHeader("User-Agent", PixivArtSourceDefines.USER_AGENT)
+                .addHeader("App-OS", PixivArtSourceDefines.APP_OS)
+                .addHeader("App-OS-Version", PixivArtSourceDefines.APP_OS_VERSION)
+                .addHeader("App-Version", PixivArtSourceDefines.APP_VERSION);
+    }
+
+    private Response sendPostRequest(String url, JsonObject bodyData,
+                                     String contentType) throws IOException {
+        String bodyString;
+        if (contentType.equals("application/json")) {
+            bodyString = bodyData.toString();
+        } else {
+            ArrayList<String> buf = new ArrayList<String>();
+            for (JsonObject.Member member : bodyData) {
+                JsonValue v = member.getValue();
+                if (v.isNumber()) {
+                    buf.add(String.format("%s=%d", member.getName(), v.asInt()));
+                } else {
+                    buf.add(String.format("%s=%s", member.getName(), v.asString()));
+                }
+            }
+            bodyString = TextUtils.join("&", buf);
+        }
+        RequestBody body = RequestBody.create(
+                MediaType.parse(contentType),
+                bodyString
+        );
+        // Log.d(LOG_TAG, "data: " + bodyString);
+        return sendPostRequest(url, body);
+    }
+
+    private Response sendPostRequest(String url, RequestBody body) throws IOException {
+        Log.d(LOG_TAG, "Request: " + url);
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build();
+
+        Request.Builder builder = applyCommonHeaders(new Request.Builder())
+                .addHeader("Content-type", body.contentType().toString())
+                .post(body)
+                .url(url);
+        if (this.authorized) {
+            builder.addHeader("Authorization", "Bearer " + this.accessToken);
         }
         return httpClient.newCall(builder.build()).execute();
     }

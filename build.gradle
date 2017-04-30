@@ -51,4 +51,8 @@ android {
         minSdkVersion 17
         targetSdkVersion 19
     }
+    compileOptions {
+        targetCompatibility 1.7
+        sourceCompatibility 1.7
+    }
 }
