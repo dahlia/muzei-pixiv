@@ -182,7 +182,9 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             case "follow":
                 return checkAuth() ? FOLLOW_URL : DAILY_RANKING_URL;
             case "bookmark":
-                return checkAuth() ? BOOKMARK_URL : DAILY_RANKING_URL;
+                return checkAuth()
+                    ? (BOOKMARK_URL + "?user_id=" + this.userId + "&restrict=public")
+                    : DAILY_RANKING_URL;
             case "weekly_rank":
                 return WEEKLY_RANKING_URL;
             case "monthly_rank":
