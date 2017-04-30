@@ -35,8 +35,6 @@ import com.eclipsesource.json.JsonValue;
 import com.google.android.apps.muzei.api.Artwork;
 import com.google.android.apps.muzei.api.RemoteMuzeiArtSource;
 
-import org.json.JSONObject;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -44,8 +42,6 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -60,7 +56,6 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
     private static final String PIXIV_API_HOST = "https://app-api.pixiv.net";
     private static final String PIXIV_RANKING_URL = PIXIV_API_HOST + "/v1/illust/ranking";
-    private static final String FEED_POSTFIX = "&content=illust&p=1&format=json";
     private static final String DAILY_RANKING_URL =
             PIXIV_RANKING_URL + "?mode=day";
     private static final String WEEKLY_RANKING_URL =
@@ -239,10 +234,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             final JsonObject content;
             try {
                 content = contents.get(i).asObject();
-            } catch (IndexOutOfBoundsException e) {
-                Log.e(LOG_TAG, e.toString(), e);
-                throw new RetryException(e);
-            } catch (NullPointerException e) {
+            } catch (IndexOutOfBoundsException | NullPointerException e) {
                 Log.e(LOG_TAG, e.toString(), e);
                 throw new RetryException(e);
             }

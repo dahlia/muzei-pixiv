@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.preference.ListPreference;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,9 +22,9 @@ class SummariedPreferenceAdapter extends ArrayAdapter<CharSequence> {
 
     private final String key;
 
-    public SummariedPreferenceAdapter(Context context,
-                                      String key,
-                                      CharSequence[] entries) {
+    SummariedPreferenceAdapter(Context context,
+                               String key,
+                               CharSequence[] entries) {
         super(context, android.R.layout.simple_list_item_single_choice, entries);
         this.key = key;
     }
@@ -54,6 +55,7 @@ class SummariedPreferenceAdapter extends ArrayAdapter<CharSequence> {
         return !items.contains(value);
     }
 
+    @NonNull
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         View view = super.getView(position, convertView, parent);
