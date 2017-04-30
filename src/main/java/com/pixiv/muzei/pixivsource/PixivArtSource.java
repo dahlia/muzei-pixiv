@@ -54,29 +54,6 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     private static final String SOURCE_NAME = "PixivArtSource";
     private static final int MINUTE = 60 * 1000;  // a minute in milliseconds
 
-    private static final String PIXIV_API_HOST = "https://app-api.pixiv.net";
-    private static final String PIXIV_RANKING_URL = PIXIV_API_HOST + "/v1/illust/ranking";
-    private static final String DAILY_RANKING_URL =
-            PIXIV_RANKING_URL + "?mode=day";
-    private static final String WEEKLY_RANKING_URL =
-            PIXIV_RANKING_URL + "?mode=week";
-    private static final String MONTHLY_RANKING_URL =
-            PIXIV_RANKING_URL + "?mode=month";
-    private static final String BOOKMARK_URL =
-            PIXIV_API_HOST + "/v1/user/bookmarks/illust";
-    private static final String FOLLOW_URL =
-            PIXIV_API_HOST + "/v2/illust/follow";
-    private static final String OAUTH_URL =
-            "https://oauth.secure.pixiv.net/auth/token";
-
-    private static final String APP_OS = "ios";
-    private static final String APP_OS_VERSION = "10.3.1";
-    private static final String APP_VERSION = "6.7.1";
-    private static final String USER_AGENT =
-        "PixivIOSApp/6.7.1 (iOS 10.3.1; iPhone8,1)";
-    private static final String CLIENT_ID = "bYGKuGVw91e0NMfPGp44euvGt59s";
-    private static final String CLIENT_SECRET = "HP3RmkgAmEGro0gn1x9ioawQE8WMfvLXDz3ZqxpK";
-
     private String accessToken = null;
     private String userId = null;
     private boolean authorized = false;
@@ -93,9 +70,11 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
     private int getChangeInterval() {
         final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
-        final String defaultValue = getString(R.string.pref_changeInterval_default),
-                     s = preferences.getString("pref_changeInterval", defaultValue);
-        Log.d(LOG_TAG, "pref_changeInterval = \"" + s + "\"");
+        final String s = preferences.getString(
+                "pref_changeInterval", String.valueOf(R.string.pref_changeInterval_default)
+        );
+        Log.d(LOG_TAG, "pref_changeInterval = " + s);
+
         try {
             return Integer.parseInt(s);
         } catch (NumberFormatException e) {
@@ -143,8 +122,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
         JsonObject data = new JsonObject();
         data.add("get_secure_url", 1);
-        data.add("client_id", CLIENT_ID);
-        data.add("client_secret", CLIENT_SECRET);
+        data.add("client_id", PixivArtSourceDefines.CLIENT_ID);
+        data.add("client_secret", PixivArtSourceDefines.CLIENT_SECRET);
         // TODO: use refresh token for the security
         data.add("grant_type", "password");
         data.add("username", loginId);
@@ -152,7 +131,11 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
         JsonObject ret;
         try {
-            Response resp = sendPostRequest(OAUTH_URL, data, "application/x-www-form-urlencoded");
+            Response resp = sendPostRequest(
+                    PixivArtSourceDefines.OAUTH_URL,
+                    data,
+                    "application/x-www-form-urlencoded"
+            );
 
             //Log.d(LOG_TAG, resp.body().string());
             ret = Json.parse(resp.body().string()).asObject();
@@ -171,24 +154,27 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
     private String getUpdateUri() {
         final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
-        final String updateMode =
-                preferences.getString("pref_updateMode", String.valueOf(R.string.pref_updateMode_default));
+
+        final String updateMode = preferences.getString(
+                "pref_updateMode", String.valueOf(R.string.pref_updateMode_default)
+        );
+
         switch (updateMode) {
             case "follow":
                 return checkAuth()
-                    ? (FOLLOW_URL + "?restrict=public")
-                    : DAILY_RANKING_URL;
+                    ? (PixivArtSourceDefines.FOLLOW_URL + "?restrict=public")
+                    : PixivArtSourceDefines.DAILY_RANKING_URL;
             case "bookmark":
                 return checkAuth()
-                    ? (BOOKMARK_URL + "?user_id=" + this.userId + "&restrict=public")
-                    : DAILY_RANKING_URL;
+                    ? (PixivArtSourceDefines.BOOKMARK_URL + "?user_id=" + this.userId + "&restrict=public")
+                    : PixivArtSourceDefines.DAILY_RANKING_URL;
             case "weekly_rank":
-                return WEEKLY_RANKING_URL;
+                return PixivArtSourceDefines.WEEKLY_RANKING_URL;
             case "monthly_rank":
-                return MONTHLY_RANKING_URL;
+                return PixivArtSourceDefines.MONTHLY_RANKING_URL;
             case "daily_rank":
             default:
-                return DAILY_RANKING_URL;
+                return PixivArtSourceDefines.DAILY_RANKING_URL;
         }
     }
 
@@ -206,6 +192,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         }
 
         final String updateUri = getUpdateUri();
+
         try {
             Response resp = sendGetRequest(updateUri);
             Log.d(LOG_TAG, "Response code: " + resp.code());
@@ -361,15 +348,11 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     private Response sendGetRequest(String url, String referer) throws IOException {
         Log.d(LOG_TAG, "Request: " + url);
         OkHttpClient httpClient = new OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build();
-        Request.Builder builder = new Request.Builder()
-            .addHeader("User-Agent", USER_AGENT)
-            .addHeader("App-OS", APP_OS)
-            .addHeader("App-OS-Version", APP_OS_VERSION)
-            .addHeader("App-Version", APP_VERSION)
-            .url(url);
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build();
+        Request.Builder builder = applyCommonHeaders(new Request.Builder())
+                .url(url);
         if (referer != null) {
             builder.addHeader("Referer", referer);
         }
@@ -379,7 +362,15 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         return httpClient.newCall(builder.build()).execute();
     }
 
-    private Response sendPostRequest(String url, JsonObject bodyData, String contentType) throws IOException {
+    private Request.Builder applyCommonHeaders(Request.Builder builder) {
+        return builder.addHeader("User-Agent", PixivArtSourceDefines.USER_AGENT)
+                .addHeader("App-OS", PixivArtSourceDefines.APP_OS)
+                .addHeader("App-OS-Version", PixivArtSourceDefines.APP_OS_VERSION)
+                .addHeader("App-Version", PixivArtSourceDefines.APP_VERSION);
+    }
+
+    private Response sendPostRequest(String url, JsonObject bodyData,
+                                     String contentType) throws IOException {
         String bodyString;
         if (contentType.equals("application/json")) {
             bodyString = bodyData.toString();
@@ -410,12 +401,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build();
 
-        Request.Builder builder = new Request.Builder()
+        Request.Builder builder = applyCommonHeaders(new Request.Builder())
                 .addHeader("Content-type", body.contentType().toString())
-                .addHeader("User-Agent", USER_AGENT)
-                .addHeader("App-OS", APP_OS)
-                .addHeader("App-OS-Version", APP_OS_VERSION)
-                .addHeader("App-Version", APP_VERSION)
                 .post(body)
                 .url(url);
         if (this.authorized) {
