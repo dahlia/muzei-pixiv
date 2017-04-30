@@ -25,6 +25,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.preference.PreferenceManager;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.eclipsesource.json.Json;
@@ -40,11 +41,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -68,6 +71,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             PIXIV_API_HOST + "/v1/user/bookmarks/illust";
     private static final String FOLLOW_URL =
             PIXIV_API_HOST + "/v2/illust/follow";
+    private static final String OAUTH_URL =
+            "https://oauth.secure.pixiv.net/auth/token";
 
     private static final String APP_OS = "ios";
     private static final String APP_OS_VERSION = "10.3.1";
@@ -76,6 +81,10 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         "PixivIOSApp/6.7.1 (iOS 10.3.1; iPhone8,1)";
     private static final String CLIENT_ID = "bYGKuGVw91e0NMfPGp44euvGt59s";
     private static final String CLIENT_SECRET = "HP3RmkgAmEGro0gn1x9ioawQE8WMfvLXDz3ZqxpK";
+
+    private String accessToken = null;
+    private String userId = null;
+    private boolean authorized = false;
 
     public PixivArtSource() {
         super(SOURCE_NAME);
@@ -124,6 +133,9 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     }
 
     private boolean checkAuth() {
+        // cleanup authorization information
+        this.authorized = false;
+
         final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         if (!preferences.getBoolean("pref_useAuth", false)) {
             return false;
@@ -133,7 +145,33 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         if (loginId.equals("") || loginPassword.equals("")) {
             return false;
         }
-        return true;
+
+        JsonObject data = new JsonObject();
+        data.add("get_secure_url", 1);
+        data.add("client_id", CLIENT_ID);
+        data.add("client_secret", CLIENT_SECRET);
+        // TODO: use refresh token for the security
+        data.add("grant_type", "password");
+        data.add("username", loginId);
+        data.add("password", loginPassword);
+
+        JsonObject ret;
+        try {
+            Response resp = sendPostRequest(OAUTH_URL, data, "application/x-www-form-urlencoded");
+
+            //Log.d(LOG_TAG, resp.body().string());
+            ret = Json.parse(resp.body().string()).asObject();
+        } catch (IOException e) {
+            return false;
+        }
+        if (ret.getBoolean("has_error", false)) {
+            return false;
+        }
+        final JsonObject tokens = ret.get("response").asObject();
+        this.accessToken = tokens.getString("access_token", null);
+        this.userId = tokens.get("user").asObject().getString("id", null);
+        this.authorized = this.accessToken != null && this.userId != null;
+        return authorized;
     }
 
     private String getUpdateUri() {
@@ -339,9 +377,54 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         if (referer != null) {
             builder.addHeader("Referer", referer);
         }
+        if (this.authorized) {
+            builder.addHeader("Authorization", "Bearer " + this.accessToken);
+        }
         return httpClient.newCall(builder.build()).execute();
     }
 
-    //private Response sendPostRequest(String url, RequestBody body) {
-    //}
+    private Response sendPostRequest(String url, JsonObject bodyData, String contentType) throws IOException {
+        String bodyString;
+        if (contentType.equals("application/json")) {
+            bodyString = bodyData.toString();
+        } else {
+            ArrayList<String> buf = new ArrayList<String>();
+            for (JsonObject.Member member : bodyData) {
+                JsonValue v = member.getValue();
+                if (v.isNumber()) {
+                    buf.add(String.format("%s=%d", member.getName(), v.asInt()));
+                } else {
+                    buf.add(String.format("%s=%s", member.getName(), v.asString()));
+                }
+            }
+            bodyString = TextUtils.join("&", buf);
+        }
+        RequestBody body = RequestBody.create(
+                MediaType.parse(contentType),
+                bodyString
+        );
+        // Log.d(LOG_TAG, "data: " + bodyString);
+        return sendPostRequest(url, body);
+    }
+
+    private Response sendPostRequest(String url, RequestBody body) throws IOException {
+        Log.d(LOG_TAG, "Request: " + url);
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build();
+
+        Request.Builder builder = new Request.Builder()
+                .addHeader("Content-type", body.contentType().toString())
+                .addHeader("User-Agent", USER_AGENT)
+                .addHeader("App-OS", APP_OS)
+                .addHeader("App-OS-Version", APP_OS_VERSION)
+                .addHeader("App-Version", APP_VERSION)
+                .post(body)
+                .url(url);
+        if (this.authorized) {
+            builder.addHeader("Authorization", "Bearer " + this.accessToken);
+        }
+        return httpClient.newCall(builder.build()).execute();
+    }
 }
