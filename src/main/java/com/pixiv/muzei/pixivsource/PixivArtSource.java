@@ -180,7 +180,9 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 preferences.getString("pref_updateMode", String.valueOf(R.string.pref_updateMode_default));
         switch (updateMode) {
             case "follow":
-                return checkAuth() ? FOLLOW_URL : DAILY_RANKING_URL;
+                return checkAuth()
+                    ? (FOLLOW_URL + "?restrict=public")
+                    : DAILY_RANKING_URL;
             case "bookmark":
                 return checkAuth()
                     ? (BOOKMARK_URL + "?user_id=" + this.userId + "&restrict=public")
