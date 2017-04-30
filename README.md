@@ -27,6 +27,14 @@ https://play.google.com/store/apps/details?id=net.nurik.roman.muzei
 
 Changelog
 ---------
+
+### Version 2.0.0
+
+- Update API address
+- Support authorize
+- Support follow artist, bookmark illust
+- Support weekly, monthly ranking
+
 ### Version 1.1.2
 
 - Change pixiv API address
