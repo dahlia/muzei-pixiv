@@ -43,6 +43,9 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -136,8 +139,6 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                     data,
                     "application/x-www-form-urlencoded"
             );
-
-            //Log.d(LOG_TAG, resp.body().string());
             ret = Json.parse(resp.body().string()).asObject();
         } catch (IOException e) {
             return false;
@@ -149,6 +150,8 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         this.accessToken = tokens.getString("access_token", null);
         this.userId = tokens.get("user").asObject().getString("id", null);
         this.authorized = this.accessToken != null && this.userId != null;
+        // Log.d(LOG_TAG, "auth" + this.accessToken);
+        // Log.e(LOG_TAG, "uid" + this.userId);
         return authorized;
     }
 
@@ -195,15 +198,14 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
         try {
             Response resp = sendGetRequest(updateUri);
-            Log.d(LOG_TAG, "Response code: " + resp.code());
             if (!resp.isSuccessful()) {
                 throw new RetryException();
             }
 
             ranking = Json.parse(resp.body().string()).asObject();
-            contents = ranking.get("illusts").asArray();
-        } catch (final IOException e) {
-            Log.e(LOG_TAG, e.toString(), e);
+            contents = getContents(ranking);
+        } catch (IOException e) {
+            Log.e(LOG_TAG, e.toString());
             throw new RetryException(e);
         }
 
@@ -225,23 +227,25 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 Log.e(LOG_TAG, e.toString(), e);
                 throw new RetryException(e);
             }
-            final int workId = content.getInt("id", -1);
-            final int restrict = content.getInt("restrict", -1);
-            if (workId < 0 || restrict < 0) {
+
+            final int illustId = getIllustId(content);
+            final int restrict = getRestrictMode(content);
+
+            if (illustId < 0 || restrict < 0) {
                 continue;
             }
-            final String token = workId + "." + restrict;
+            final String token = illustId + "." + restrict;
             Log.d(LOG_TAG, token);
             if (prevToken != null && prevToken.equals(token)) {
                 continue;
             }
 
-            final String workUri = "http://www.pixiv.net/member_illust.php" +
-                                   "?mode=medium&illust_id=" + workId;
+            final String workUri = PixivArtSourceDefines.MEMBER_ILLUST_URL + illustId;
+
             final Uri fileUri = downloadOriginalImage(content, token, updateUri);
             final String title = content.getString("title", "");
-            final JsonObject user = content.get("user").asObject();
-            final String username = user == null ? "" : user.getString("name", "");
+
+            final String username = getUserName(content);
 
             final Artwork artwork = new Artwork.Builder()
                 .title(title)
@@ -267,15 +271,99 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         scheduleUpdate();
     }
 
-    private String findOriginalImageUri(JsonObject content) throws RetryException {
-        JsonObject single_page = content.get("meta_single_page").asObject();
-        if (single_page == null) {
+    private String getUserName(JsonObject content) {
+        String username = content.getString("user_name", null);
+        if (username != null) {
+            return username;
+        }
+        JsonValue user = content.get("user");
+        if (user == null) {
+            return "";
+        }
+        return user.asObject().getString("name", "");
+    }
+
+    private JsonArray getContents(JsonObject ranking) throws IOException {
+        JsonValue contents = ranking.get("contents");
+        if (contents != null) {
+            return contents.asArray();
+        }
+        contents = ranking.get("illusts");
+        if (contents != null) {
+            return contents.asArray();
+        }
+        throw new IOException("Not found contents");
+    }
+
+    private int getIllustId(JsonObject content) {
+        int illustId = content.getInt("id", -1);
+        if (illustId >= 0) {
+            return illustId;
+        }
+        return content.getInt("illust_id", -1);
+    }
+
+    private int getRestrictMode(JsonObject content) {
+        int restrict = content.getInt("restrict", -1);
+        if (restrict >= 0) {
+            return restrict;
+        }
+        JsonValue contentType = content.get("illust_content_type");
+        if (contentType == null) {
+            return -1;
+        }
+        return contentType.asObject().getInt("sexual", -1);
+    }
+
+    // input: https://i.pximg.net/c/240x480/img-master/img/2017/10/29/00/00/01/65636164_p0_master1200.jpg
+    // original: https://i.pximg.net/img-original/img/2017/10/29/00/00/01/65636164_p0.png
+    private static final Pattern IMAGE_URI_PATTERN = Pattern.compile(
+        "^(https?://.+?/)c/[0-9]+x[0-9]+/img-master(/.+)_master.+$"
+    );
+
+    private static final String[] IMAGE_SUFFIXS = {
+        ".png",
+        ".jpg",
+        ".gif",
+    };
+
+    private Response findOriginalImageResponseFromOldType(JsonObject content) throws RetryException {
+        String imageUri = content.getString("url", null);
+        if (imageUri == null) {
             throw new RetryException();
         }
+        final Matcher m = IMAGE_URI_PATTERN.matcher(imageUri);
+        if (!m.matches()) {
+            Log.e(LOG_TAG, "Match failed: " + imageUri);
+            throw new RetryException();
+        }
+        final String base = m.group(1), path = m.group(2);
+        for (String suffix : IMAGE_SUFFIXS) {
+            String orig = base + "img-original" + path + suffix;
+            try {
+                Response res = sendGetRequest(orig, PixivArtSourceDefines.PIXIV_HOST);
+                if (res.code() == 200) {
+                    return res;
+                }
+            } catch (IOException e) {}
+        }
+        Log.e(LOG_TAG, "Not fount orig image: " + imageUri);
+        throw new RetryException();
+    }
+
+    private Response getOriginalImageResponse(JsonObject content, String referer) throws RetryException {
+        JsonValue single_page = content.get("meta_single_page");
+        if (single_page == null) {
+            return findOriginalImageResponseFromOldType(content);
+        }
         String url;
-        url = single_page.getString("original_image_url", null);
+        url = single_page.asObject().getString("original_image_url", null);
         if (url != null) {
-            return url;
+            try {
+                return sendGetRequest(url, referer);
+            } catch (IOException e) {
+                throw new RetryException();
+            }
         }
         JsonArray meta_pages = content.get("meta_pages").asArray();
         JsonObject group = null;
@@ -293,7 +381,9 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         for (String size : new String[]{"original", "large", "medium"}) {
             url = urls.getString(size, null);
             if (url != null) {
-                return url;
+                try {
+                    return sendGetRequest(url, referer);
+                } catch (IOException e) {}
             }
         }
         throw new RetryException();
@@ -308,11 +398,10 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             throw new RetryException();
         }
 
-        final String uri = findOriginalImageUri(content);
         final File originalFile = new File(app.getExternalCacheDir(), token);
 
         try {
-            Response resp = sendGetRequest(uri, referer);
+            Response resp = getOriginalImageResponse(content, referer);
 
             final int status = resp.code();
             Log.d(LOG_TAG, "Response code: " + status);
