@@ -29,6 +29,11 @@ This is not a standalone app.  It requires [Muzei app][] to be installed.
 Changelog
 ---------
 
+### Version 2.1.0
+
+- Fix feed update problem (#19)
+
+
 ### Version 2.0.0
 
 - Update API address
