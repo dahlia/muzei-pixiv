@@ -29,6 +29,11 @@ This is not a standalone app.  It requires [Muzei app][] to be installed.
 Changelog
 ---------
 
+### Version 2.2.0
+
+- Fix update problem of ranking modes (#20)
+
+
 ### Version 2.1.0
 
 - Fix feed update problem (#19)
