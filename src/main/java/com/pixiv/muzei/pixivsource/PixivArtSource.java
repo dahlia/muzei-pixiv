@@ -155,30 +155,43 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         return authorized;
     }
 
-    private String getUpdateUri() {
+    private JsonObject getUpdateUriInfo() {
         final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
 
         final String updateMode = preferences.getString(
                 "pref_updateMode", String.valueOf(R.string.pref_updateMode_default)
         );
 
+        JsonObject ret = new JsonObject();
+
         switch (updateMode) {
             case "follow":
-                return checkAuth()
-                    ? (PixivArtSourceDefines.FOLLOW_URL + "?restrict=public")
-                    : PixivArtSourceDefines.DAILY_RANKING_URL;
+                if (checkAuth()) {
+                    ret.add("use_auth_api", true);
+                    ret.add("url", PixivArtSourceDefines.FOLLOW_URL + "?restrict=public");
+                } else {
+                    ret.add("url", PixivArtSourceDefines.DAILY_RANKING_URL);
+                }
+                break;
             case "bookmark":
-                return checkAuth()
-                    ? (PixivArtSourceDefines.BOOKMARK_URL + "?user_id=" + this.userId + "&restrict=public")
-                    : PixivArtSourceDefines.DAILY_RANKING_URL;
+                if (checkAuth()) {
+                    ret.add("use_auth_api", true);
+                    ret.add("url", PixivArtSourceDefines.BOOKMARK_URL + "?user_id=" + this.userId + "&restrict=public");
+                } else {
+                    ret.add("url", PixivArtSourceDefines.DAILY_RANKING_URL);
+                }
+                break;
             case "weekly_rank":
-                return PixivArtSourceDefines.WEEKLY_RANKING_URL;
+                ret.add("url", PixivArtSourceDefines.WEEKLY_RANKING_URL);
+                break;
             case "monthly_rank":
-                return PixivArtSourceDefines.MONTHLY_RANKING_URL;
+                ret.add("url", PixivArtSourceDefines.MONTHLY_RANKING_URL);
+                break;
             case "daily_rank":
             default:
-                return PixivArtSourceDefines.DAILY_RANKING_URL;
+                ret.add("url", PixivArtSourceDefines.DAILY_RANKING_URL);
         }
+        return ret;
     }
 
     @Override
@@ -194,10 +207,10 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
             return;
         }
 
-        final String updateUri = getUpdateUri();
+        final JsonObject updateUriInfo = getUpdateUriInfo();
 
         try {
-            Response resp = sendGetRequest(updateUri);
+            Response resp = sendGetRequest(updateUriInfo);
             if (!resp.isSuccessful()) {
                 throw new RetryException();
             }
@@ -242,7 +255,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
 
             final String workUri = PixivArtSourceDefines.MEMBER_ILLUST_URL + illustId;
 
-            final Uri fileUri = downloadOriginalImage(content, token, updateUri);
+            final Uri fileUri = downloadOriginalImage(content, token, updateUriInfo.getString("url", ""));
             final String title = content.getString("title", "");
 
             final String username = getUserName(content);
@@ -435,13 +448,23 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
     }
 
     private Response sendGetRequest(String url, String referer) throws IOException {
+        JsonObject obj = new JsonObject();
+        obj.add("url", url);
+        obj.add("referer", referer);
+        return sendGetRequest(obj);
+    }
+
+    private Response sendGetRequest(JsonObject urlInfo) throws IOException {
+        String url = urlInfo.getString("url", "");
+
         Log.d(LOG_TAG, "Request: " + url);
         OkHttpClient httpClient = new OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build();
-        Request.Builder builder = applyCommonHeaders(new Request.Builder())
+        Request.Builder builder = applyCommonHeaders(new Request.Builder(), urlInfo.getBoolean("use_auth_api", false))
                 .url(url);
+        String referer = urlInfo.getString("referer", null);
         if (referer != null) {
             builder.addHeader("Referer", referer);
         }
@@ -451,11 +474,14 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
         return httpClient.newCall(builder.build()).execute();
     }
 
-    private Request.Builder applyCommonHeaders(Request.Builder builder) {
-        return builder.addHeader("User-Agent", PixivArtSourceDefines.USER_AGENT)
-                .addHeader("App-OS", PixivArtSourceDefines.APP_OS)
-                .addHeader("App-OS-Version", PixivArtSourceDefines.APP_OS_VERSION)
-                .addHeader("App-Version", PixivArtSourceDefines.APP_VERSION);
+    private Request.Builder applyCommonHeaders(Request.Builder builder, boolean useAuthAPI) {
+        if (useAuthAPI) {
+            return builder.addHeader("User-Agent", PixivArtSourceDefines.APP_USER_AGENT)
+                    .addHeader("App-OS", PixivArtSourceDefines.APP_OS)
+                    .addHeader("App-OS-Version", PixivArtSourceDefines.APP_OS_VERSION)
+                    .addHeader("App-Version", PixivArtSourceDefines.APP_VERSION);
+        }
+        return builder.addHeader("User-Agent", PixivArtSourceDefines.BROWSER_USER_AGENT);
     }
 
     private Response sendPostRequest(String url, JsonObject bodyData,
@@ -490,7 +516,7 @@ public class PixivArtSource extends RemoteMuzeiArtSource {
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build();
 
-        Request.Builder builder = applyCommonHeaders(new Request.Builder())
+        Request.Builder builder = applyCommonHeaders(new Request.Builder(), true)
                 .addHeader("Content-type", body.contentType().toString())
                 .post(body)
                 .url(url);
