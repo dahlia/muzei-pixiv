@@ -17,9 +17,6 @@ This is not a standalone app.  It requires [Muzei app][] to be installed.
 [<img src="https://f-droid.org/badge/get-it-on.png"
       alt="Get it on F-Droid"
       height="80">][F-Droid]
-[<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png"
-      alt="Get it on Google Play"
-      height="80">][Play Store]
 
 [Pixiv]: http://www.pixiv.com/
 [Muzei]: http://www.muzei.co/
@@ -27,7 +24,6 @@ This is not a standalone app.  It requires [Muzei app][] to be installed.
 [Hong Minhee]: http://dahlia.kr/
 [GPLv3]: http://www.gnu.org/licenses/gpl-3.0.html
 [F-Droid]: https://f-droid.org/app/com.pixiv.muzei.pixivsource
-[Play Store]: https://play.google.com/store/apps/details?id=com.pixiv.muzei.pixivsource
 
 Changelog
 ---------
