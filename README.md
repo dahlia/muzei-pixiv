@@ -16,15 +16,14 @@ This is not a standalone app.  It requires [Muzei app][] to be installed.
 
 [<img src="https://f-droid.org/badge/get-it-on.png"
       alt="Get it on F-Droid"
-      height="80">][fdroid]
+      height="80">][F-Droid]
 
 [Pixiv]: http://www.pixiv.com/
 [Muzei]: http://www.muzei.co/
 [Muzei app]: https://play.google.com/store/apps/details?id=net.nurik.roman.muzei
 [Hong Minhee]: http://dahlia.kr/
 [GPLv3]: http://www.gnu.org/licenses/gpl-3.0.html
-[fdroid]: https://f-droid.org/app/com.pixiv.muzei.pixivsource
-
+[F-Droid]: https://f-droid.org/app/com.pixiv.muzei.pixivsource
 
 Changelog
 ---------
