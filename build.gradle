@@ -22,7 +22,7 @@ buildscript {
         google()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.0.1'
+        classpath 'com.android.tools.build:gradle:3.4.0'
     }
 }
 
@@ -35,23 +35,23 @@ repositories {
 }
 
 dependencies {
-    compile 'com.squareup.retrofit:retrofit:1.3.0'
-    compile 'com.google.android.apps.muzei:muzei-api:+'
-    compile 'com.android.support:support-v4:25.3.1'
-    compile 'com.eclipsesource.minimal-json:minimal-json:0.9.4'
-    compile 'com.squareup.okhttp3:okhttp:3.7.0'
+    implementation 'com.squareup.retrofit:retrofit:1.3.0'
+    implementation 'com.android.support:support-v4:25.4.0'
+    implementation 'com.eclipsesource.minimal-json:minimal-json:0.9.4'
+    implementation 'com.squareup.okhttp3:okhttp:3.7.0'
+    api 'com.google.android.apps.muzei:muzei-api:+'
     //compile project(':api')
 }
 
 android {
-    compileSdkVersion 19
-    buildToolsVersion '26.0.2'
+    compileSdkVersion 28
+    buildToolsVersion '28.0.3'
     defaultConfig {
         versionCode 20201
         versionName "2.2.1"
 
         minSdkVersion 17
-        targetSdkVersion 19
+        targetSdkVersion 25
     }
     compileOptions {
         targetCompatibility 1.7
