@@ -1,13 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <com.pixiv.muzei.pixivsource.settings.SummariedListPreference
-        android:key="pref_changeInterval"
-        android:title="@string/pref_changeInterval"
-        android:dialogTitle="@string/pref_changeInterval"
-        android:entries="@array/pref_changeInterval_entries"
-        android:entryValues="@array/pref_changeInterval_entryValues"
-        android:defaultValue="@string/pref_changeInterval_default"
-        android:persistent="true" />
     <SwitchPreference
         android:key="pref_useAuth"
         android:title="@string/pref_useAuth"
@@ -33,10 +25,5 @@
         android:entries="@array/pref_updateMode_entries"
         android:entryValues="@array/pref_updateMode_entryValues"
         android:defaultValue="@string/pref_updateMode_default"
-        android:persistent="true" />
-    <SwitchPreference
-        android:key="pref_onlyWifi"
-        android:title="@string/pref_onlyWifi"
-        android:dialogTitle="@string/pref_onlyWifi"
         android:persistent="true" />
 </PreferenceScreen>

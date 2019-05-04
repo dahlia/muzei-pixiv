@@ -15,34 +15,36 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
   -->
 
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.pixiv.muzei.pixivsource">
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Required by RemoteMuzeiArtSource -->
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
-        android:icon="@drawable/ic_launcher">
+        android:icon="@drawable/ic_launcher"
+        tools:ignore="GoogleAppIndexingWarning">
 
-        <service android:name=".PixivArtSource"
+        <provider
+            android:name=".PixivArtProvider"
+            android:authorities=".PixivArtProvider"
             android:label="@string/source_name"
             android:description="@string/source_description"
-            android:icon="@drawable/ic_source">
+            android:icon="@drawable/ic_source"
+            android:exported="true"
+            android:permission="com.google.android.apps.muzei.api.ACCESS_PROVIDER">
             <!-- Logo art from: http://dev.pixiv.net/archives/660077.html -->
             <intent-filter>
-                <action android:name="com.google.android.apps.muzei.api.MuzeiArtSource" />
+                <action android:name="com.google.android.apps.muzei.api.MuzeiArtProvider" />
             </intent-filter>
+
             <meta-data android:name="settingsActivity"
                        android:value="com.pixiv.muzei.pixivsource.settings.SettingsActivity" />
             <meta-data android:name="color" android:value="#0096db" />
-        </service>
+        </provider>
 
         <activity android:name=".settings.SettingsActivity"
                   android:label="@string/app_name"
