@@ -6,14 +6,8 @@ import android.os.Bundle;
 import android.preference.PreferenceFragment;
 import android.util.Log;
 
-import com.google.android.apps.muzei.api.provider.Artwork;
-import com.google.android.apps.muzei.api.provider.ProviderClient;
-import com.google.android.apps.muzei.api.provider.ProviderContract;
-import com.pixiv.muzei.pixivsource.PixivArtProvider;
 import com.pixiv.muzei.pixivsource.PixivArtWorker;
 import com.pixiv.muzei.pixivsource.R;
-
-import java.util.ArrayList;
 
 public class SettingsFragment extends PreferenceFragment {
     private static final String LOG_TAG = "muzei.PixivArt.Settings";
@@ -69,9 +63,6 @@ public class SettingsFragment extends PreferenceFragment {
             return;
         }
         Log.d(LOG_TAG, "new update mode: " + newUpdateMode);
-        ProviderClient client = ProviderContract.getProviderClient(getContext(), PixivArtProvider.class);
-        // all clear cache
-        client.setArtwork(new ArrayList<Artwork>());
         // request reload
         PixivArtWorker.enqueLoad();
     }

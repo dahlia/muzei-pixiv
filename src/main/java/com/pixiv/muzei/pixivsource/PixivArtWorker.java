@@ -91,6 +91,7 @@ public class PixivArtWorker extends Worker {
         ProviderClient client =
                 ProviderContract.getProviderClient(getApplicationContext(), PixivArtProvider.class);
 
+        ArrayList artworks = new ArrayList<Artwork>();
         for (JsonValue item : contents) {
             final JsonObject content = item.asObject();
             final int illustId = getIllustId(content);
@@ -123,8 +124,9 @@ public class PixivArtWorker extends Worker {
                     .persistentUri(fileUri)
                     .token(token)
                     .build();
-            client.addArtwork(artwork);
+            artworks.add(artwork);
         }
+        client.setArtwork(artworks);
         return Result.success();
     }
 

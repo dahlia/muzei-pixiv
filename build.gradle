@@ -51,8 +51,8 @@ android {
         versionCode 20201
         versionName "2.2.1"
 
-        minSdkVersion 23
-        targetSdkVersion 25
+        minSdkVersion 19
+        targetSdkVersion 26
     }
     compileOptions {
         targetCompatibility 1.7
