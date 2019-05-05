@@ -50,7 +50,7 @@ android {
         versionCode 20201
         versionName "2.2.1"
 
-        minSdkVersion 19
+        minSdkVersion 23
         targetSdkVersion 25
     }
     compileOptions {
