@@ -101,7 +101,7 @@ public class PixivArtWorker extends Worker {
             }
 
             final String token = illustId + "." + restrict;
-            Log.d(LOG_TAG, token);
+            // Log.d(LOG_TAG, token);
 
             final String workUri = PixivArtSourceDefines.MEMBER_ILLUST_URL + illustId;
             final Uri webUri = Uri.parse(workUri);
@@ -112,8 +112,8 @@ public class PixivArtWorker extends Worker {
                 Log.d(LOG_TAG, e.toString());
                 continue;
             }
-            final String title = content.getString("title", "");
 
+            final String title = content.getString("title", "");
             final String username = getUserName(content);
 
             final Artwork artwork = new Artwork.Builder()
@@ -276,8 +276,7 @@ public class PixivArtWorker extends Worker {
         }
         final Matcher m = IMAGE_URI_PATTERN.matcher(imageUri);
         if (!m.matches()) {
-            Log.e(LOG_TAG, "Match failed: " + imageUri);
-            throw new IOException("Unmatched URL pattern");
+            throw new IOException("Unmatched URL pattern: " + imageUri);
         }
         final String base = m.group(1), path = m.group(2);
         for (String suffix : IMAGE_SUFFIXS) {
@@ -289,8 +288,7 @@ public class PixivArtWorker extends Worker {
                 }
             } catch (IOException e) {}
         }
-        Log.e(LOG_TAG, "Not fount orig image: " + imageUri);
-        throw new IOException("Couldn't find original image");
+        throw new IOException("Couldn't find original image: " + imageUri);
     }
 
     private Response getOriginalImageResponse(JsonObject content, String referer) throws IOException {
@@ -343,7 +341,6 @@ public class PixivArtWorker extends Worker {
         Response resp = getOriginalImageResponse(content, referer);
 
         final int status = resp.code();
-        Log.d(LOG_TAG, "Response code: " + status);
         if (!resp.isSuccessful()) {
             throw new IOException("Unsuccessful request: " + status);
         }
@@ -363,7 +360,6 @@ public class PixivArtWorker extends Worker {
             fileStream.close();
         }
         inputStream.close();
-        Log.d(LOG_TAG, "cache file path: " + originalFile.getAbsolutePath());
         if (failed) {
             originalFile.delete();
             throw new IOException("download failed: " + originalFile.getAbsolutePath());
