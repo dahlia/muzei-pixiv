@@ -321,16 +321,24 @@ public class PixivArtProvider extends MuzeiArtProvider {
 
         final FileOutputStream fileStream = new FileOutputStream(originalFile);
         final InputStream inputStream = resp.body().byteStream();
+        boolean failed = false;
         try {
             final byte[] buffer = new byte[1024 * 50];
             int read;
             while ((read = inputStream.read(buffer)) > 0) {
                 fileStream.write(buffer, 0, read);
             }
+        } catch (IOException e) {
+            failed = true;
         } finally {
             fileStream.close();
         }
         inputStream.close();
+        Log.d(LOG_TAG, "cache file path: " + originalFile.getAbsolutePath());
+        if (failed) {
+            originalFile.delete();
+            throw new IOException("download failed: " + originalFile.getAbsolutePath());
+        }
         Log.d(LOG_TAG, "cache file path: " + originalFile.getAbsolutePath());
         return Uri.parse("file://" + originalFile.getAbsolutePath());
     }
