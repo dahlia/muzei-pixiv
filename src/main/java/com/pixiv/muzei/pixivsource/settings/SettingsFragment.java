@@ -10,6 +10,7 @@ import com.google.android.apps.muzei.api.provider.Artwork;
 import com.google.android.apps.muzei.api.provider.ProviderClient;
 import com.google.android.apps.muzei.api.provider.ProviderContract;
 import com.pixiv.muzei.pixivsource.PixivArtProvider;
+import com.pixiv.muzei.pixivsource.PixivArtWorker;
 import com.pixiv.muzei.pixivsource.R;
 
 import java.util.ArrayList;
@@ -71,6 +72,7 @@ public class SettingsFragment extends PreferenceFragment {
         ProviderClient client = ProviderContract.getProviderClient(getContext(), PixivArtProvider.class);
         // all clear cache
         client.setArtwork(new ArrayList<Artwork>());
-        // TODO force update immediately
+        // request reload
+        PixivArtWorker.enqueLoad();
     }
 }
