@@ -340,6 +340,12 @@ public class PixivArtWorker extends Worker {
             throw new IOException("Couldn't get cache directory");
         }
 
+        // TODO: resume download or check finished download.
+        if (originalFile.exists()) {
+            Log.d(LOG_TAG, "already exists: " + originalFile.getAbsolutePath());
+            return Uri.parse("file://" + originalFile.getAbsolutePath());
+        }
+
         Response resp = getOriginalImageResponse(content, referer);
 
         final int status = resp.code();
