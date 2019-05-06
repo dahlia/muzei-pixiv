@@ -340,17 +340,26 @@ public class PixivArtWorker extends Worker {
             throw new IOException("Couldn't get cache directory");
         }
 
-        // TODO: resume download or check finished download.
+        // TODO: check with `If-Modified-Since`
+        Response resp = getOriginalImageResponse(content, referer);
         if (originalFile.exists()) {
-            Log.d(LOG_TAG, "already exists: " + originalFile.getAbsolutePath());
-            return Uri.parse("file://" + originalFile.getAbsolutePath());
+            if (!resp.isSuccessful()) {
+                Log.d(LOG_TAG, "download fault & but already have the file: " + originalFile.getAbsolutePath());
+                resp.close();
+                return Uri.parse("file://" + originalFile.getAbsolutePath());
+            }
+
+            final int contentLength = Integer.parseInt(resp.header("content-length"), 10);
+            if (contentLength == originalFile.length()) {
+                Log.d(LOG_TAG, "already exists & downloaded: " + originalFile.getAbsolutePath());
+                resp.close();
+                return Uri.parse("file://" + originalFile.getAbsolutePath());
+            }
         }
 
-        Response resp = getOriginalImageResponse(content, referer);
-
-        final int status = resp.code();
         if (!resp.isSuccessful()) {
-            throw new IOException("Unsuccessful request: " + status);
+            resp.close();
+            throw new IOException("Unsuccessful request: " + resp.code());
         }
 
         final FileOutputStream fileStream = new FileOutputStream(originalFile);
@@ -368,6 +377,7 @@ public class PixivArtWorker extends Worker {
             fileStream.close();
         }
         inputStream.close();
+        resp.close();
         if (failed) {
             originalFile.delete();
             throw new IOException("download failed: " + originalFile.getAbsolutePath());
