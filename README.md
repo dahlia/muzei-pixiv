@@ -29,6 +29,11 @@ This is not a standalone app.  It requires [Muzei app][] to be installed.
 Changelog
 ---------
 
+### Vesrion 3.0.0
+
+- Move to new Muzei API
+
+
 ### Version 2.2.0
 
 - Fix update problem of ranking modes (#20)

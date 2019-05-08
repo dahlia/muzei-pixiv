@@ -48,8 +48,8 @@ android {
     compileSdkVersion 28
     buildToolsVersion '28.0.3'
     defaultConfig {
-        versionCode 20201
-        versionName "2.2.1"
+        versionCode 30000
+        versionName "3.0.0"
 
         minSdkVersion 19
         targetSdkVersion 26
